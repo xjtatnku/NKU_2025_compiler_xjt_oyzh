@@ -1,0 +1,4 @@
+Input file: testcase/lexer/simple.sy
+Step: -lexer
+Output: a.out
+Optimize level: 0
