@@ -1,3 +1,20 @@
+/*
+ * Lab1 词法分析器实验 - Token定义
+ * 
+ * 本文件包含了词法分析器需要的所有token定义
+ * 
+ * Lab1主要修改位置：
+ * - 第61-91行：补充了完整的token定义
+ *   1. 添加了常量类型：LL_CONST(长整型)、FLOAT_CONST(浮点型)
+ *   2. 添加了类型关键字：INT、FLOAT、VOID
+ *   3. 添加了算术运算符：ASSIGN(=)、PLUS(+)、MINUS(-)、STAR(*)、SLASH(/)、MOD(%)
+ *   4. 添加了关系运算符：LT(<)、GT(>)、LE(<=)、GE(>=)、EQ(==)、NE(!=)
+ *   5. 添加了逻辑运算符：AND(&&)、OR(||)、NOT(!)
+ * 
+ * 这些token定义与frontend/parser/lexer.l中的词法规则相对应
+ * 词法分析器在lexer.l中识别这些token，然后传递给语法分析器
+ */
+
 %skeleton "lalr1.cc"
 %require "3.2"
 
@@ -58,23 +75,37 @@
 %define parse.error verbose
 %define api.token.prefix {TOKEN_}
 
-// 从这开始定义你需要用到的 token
+// ==================== Token定义区域 ====================
+// Lab1: 从这开始定义词法分析器需要使用到的 token
 // 对于一些需要 "值" 的 token，可以在前面加上 <type> 来指定值的类型
-// 例如，%token <int> INT_CONST 定义了一个名为 INT_CONST
-%token <int> INT_CONST
-%token <long long> LL_CONST
-%token <float> FLOAT_CONST
-%token <std::string> STR_CONST ERR_TOKEN SLASH_COMMENT
+// 例如，%token <int> INT_CONST 定义了一个名为 INT_CONST 的 token，其值为 int 类型
 
-%token <std::string> IDENT 
+// Lab1新增：常量类型token(带值类型)
+%token <int> INT_CONST              // 整型常量值(原始已有)
+%token <long long> LL_CONST          // Lab1新增：长整型常量值
+%token <float> FLOAT_CONST           // Lab1新增：浮点型常量值
+%token <std::string> STR_CONST ERR_TOKEN SLASH_COMMENT  // 字符串常量、错误token、单行注释
 
-%token IF ELSE FOR WHILE CONTINUE BREAK SWITCH CASE GOTO DO RETURN CONST
-%token INT FLOAT VOID
+%token <std::string> IDENT          // 标识符
+
+// Lab1新增：关键字token
+%token IF ELSE FOR WHILE CONTINUE BREAK SWITCH CASE GOTO DO RETURN CONST  // 控制流关键字(原始已有)
+%token INT FLOAT VOID                // Lab1新增：类型关键字
+
+// 分隔符token(原始已有)
 %token SEMICOLON COMMA LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token ASSIGN PLUS MINUS STAR SLASH MOD
-%token LT GT LE GE EQ NE
-%token AND OR NOT
-%token END
+
+// Lab1新增：算术运算符token
+%token ASSIGN PLUS MINUS STAR SLASH MOD   // =、+、-、*、/、%
+
+// Lab1新增：关系运算符token
+%token LT GT LE GE EQ NE             // <、>、<=、>=、==、!=
+
+// Lab1新增：逻辑运算符token
+%token AND OR NOT                    // &&、||、!
+
+// 特殊token
+%token END                            // 文件结束标记
 
 %nterm <FE::AST::Operator> UNARY_OP
 %nterm <FE::AST::Type*> TYPE

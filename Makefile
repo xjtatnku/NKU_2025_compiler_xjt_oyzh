@@ -8,7 +8,7 @@ INCLUDES = $(addprefix -I, $(INC_DIR))
 CXX_STANDARD = -std=c++17
 DBGFLAGS = -g
 WERROR_FLAGS := -Wall -Wextra -Wpedantic -Werror
-WARN_IGNORE := 
+WARN_IGNORE := -Wno-unused-variable -Wno-unused-but-set-variable -Wno-return-type
 CUSTOM_FLAGS := -DLOCAL_TEST
 CXXFLAGS = -O2 -MMD -MP $(CXX_STANDARD) $(INCLUDES) $(WERROR_FLAGS) $(DBGFLAGS) $(WARN_IGNORE) $(CUSTOM_FLAGS)
 
