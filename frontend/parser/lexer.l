@@ -62,6 +62,8 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
     loc.columns(handleTab());
 }
 
+"int"               { RETT(INT, loc) }
+"float"             { RETT(FLOAT, loc) }
 "if"                { RETT(IF, loc) }
 "else"              { RETT(ELSE, loc) }
 "for"               { RETT(FOR, loc) }
@@ -76,6 +78,27 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
 
 "const"             { RETT(CONST, loc) }
 
+"="                 { RETT(ASSIGN, loc) }
+"+"                 { RETT(PLUS, loc) }
+"-"                 { RETT(MINUS, loc) }
+"*"                 { RETT(STAR, loc) }
+"/"                 { RETT(SLASH, loc) }
+"%"                 { RETT(MOD, loc) }
+
+"=="                { RETT(EQ, loc) }
+"!="                { RETT(NE, loc) }
+"<"                 { RETT(LT, loc) }
+"<="                { RETT(LE, loc) }
+">"                 { RETT(GT, loc) }
+">="                { RETT(GE, loc) }
+
+"&&"                { RETT(AND, loc) }
+"||"                { RETT(OR, loc) }
+"!"                 { RETT(NOT, loc) }
+
+"++"                { RETT(INCRE, loc) }
+"--"                { RETT(DECRE, loc) }
+
 ";"                 { RETT(SEMICOLON, loc) }
 ","                 { RETT(COMMA, loc) }
 
@@ -84,8 +107,14 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
     // return YaccParser::make_SLASH_COMMENT(str, loc);  //思考为什么要把这一行注释掉
 }
 
-"/*""*/" {
-    //TODO(Lab1)：实现多行注释的处理，包括修改上方的匹配规则
+"/*"([^*]|[\r\n]|("*"+([^*/]|[\r\n])))*"*"+"/" {
+    // 处理多行注释，计算换行数
+    for (char* c = yytext; *c; c++) {
+        if (*c == '\n') {
+            loc.lines(1);
+            loc.step();
+        }
+    }
 }
 
 [A-Za-z_]+[A-Za-z0-9_]* {
@@ -99,14 +128,99 @@ TODO(Lab1)：参考SysY2022的定义，实现更多的词法，如浮点数、�
     return YaccParser::make_STR_CONST(str, loc); 
 }
 
+0[xX][0-9A-Fa-f]+\.[0-9A-Fa-f]*[pP][+-]?[0-9]+ {
+    try {
+        float result = convertToFloatHex(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing hexadecimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+0[xX][0-9A-Fa-f]+[pP][+-]?[0-9]+ {
+    try {
+        float result = convertToFloatHex(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing hexadecimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+[0-9]*\.[0-9]+([eE][+-]?[0-9]+)? {
+    try {
+        float result = convertToFloatDec(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing decimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+[0-9]+\.([eE][+-]?[0-9]+)? {
+    try {
+        float result = convertToFloatDec(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing decimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+[0-9]+[eE][+-]?[0-9]+ {
+    try {
+        float result = convertToFloatDec(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing decimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+0[xX][0-9A-Fa-f]+ {
+    try {
+        bool isLL = false;
+        long long result = convertToInt(yytext, '\0', isLL);
+        if (isLL) return YaccParser::make_LL_CONST(result, loc);
+        return YaccParser::make_INT_CONST(static_cast<int>(result), loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing hexadecimal int: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+0[0-7]+ {
+    try {
+        bool isLL = false;
+        long long result = convertToInt(yytext, '\0', isLL);
+        if (isLL) return YaccParser::make_LL_CONST(result, loc);
+        return YaccParser::make_INT_CONST(static_cast<int>(result), loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing octal int: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
+"0" {
+    return YaccParser::make_INT_CONST(0, loc);
+}
+
 [1-9][0-9]* {
     try {
         bool isLL = false;
         long long result = convertToInt(yytext, '\0', isLL);
-        // if (isLL) return YaccParser::make_LL_CONST(result, loc);
+        if (isLL) return YaccParser::make_LL_CONST(result, loc);
         return YaccParser::make_INT_CONST(static_cast<int>(result), loc);
     } catch (const std::exception& e) {
-        _parser.reportError(loc, std::string("Error parsing hexadecimal int: ") + e.what());
+        _parser.reportError(loc, std::string("Error parsing decimal int: ") + e.what());
         auto str = std::string(yytext);
         return YaccParser::make_ERR_TOKEN(str, loc);
     }
