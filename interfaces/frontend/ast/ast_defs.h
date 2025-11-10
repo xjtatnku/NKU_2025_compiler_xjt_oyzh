@@ -37,7 +37,9 @@
     X(BITAND, &, 14)            \
     X(AND, &&, 15)              \
     X(OR, ||, 16)               \
-    X(ASSIGN, =, 17)
+    X(ASSIGN, =, 17)            \
+    X(INCRE, ++, 18)            \
+    X(DECRE, --, 19)
 
 namespace FE::AST
 {

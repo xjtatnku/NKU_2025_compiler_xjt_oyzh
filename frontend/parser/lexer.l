@@ -66,6 +66,7 @@ loc.step 将列号置为1
 
 "int"               { RETT(INT, loc) }
 "float"             { RETT(FLOAT, loc) }
+"void"              { RETT(VOID, loc) }
 "if"                { RETT(IF, loc) }
 "else"              { RETT(ELSE, loc) }
 "for"               { RETT(FOR, loc) }

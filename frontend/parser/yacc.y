@@ -69,7 +69,7 @@
 %token <std::string> IDENT 
 
 // 关键字
-%token INT FLOAT
+%token INT FLOAT VOID
 %token IF ELSE FOR WHILE CONTINUE BREAK SWITCH CASE GOTO DO RETURN CONST
 
 // 运算符
@@ -131,15 +131,30 @@
 %start PROGRAM
 
 // 运算符优先级和结合性声明（从低到高）
-// 注意：一元运算符的优先级通过语法规则层次隐式定义（UNARY_EXPR在语法树中位置较高）
-%left COMMA                    // 逗号运算符，左结合
-%right ASSIGN                  // 赋值运算符，右结合
-%left OR                       // 逻辑或，左结合
-%left AND                      // 逻辑与，左结合
-%left EQ NE                    // 相等性比较，左结合
-%left LT LE GT GE              // 关系比较，左结合
-%left PLUS MINUS               // 加减运算，左结合
-%left STAR SLASH MOD           // 乘除模运算，左结合
+// 参考 C 语言标准优先级顺序
+// 注意：一元运算符（+、-、!、前缀++、前缀--）的优先级通过语法规则层次隐式定义
+//      UNARY_EXPR 在语法树中位置较高，优先级高于乘除运算
+//      后缀 ++ -- 在 BASIC_EXPR 中，优先级最高（除了括号和函数调用）
+
+%left COMMA                    // 1. 逗号运算符，左结合（最低优先级）
+
+%right ASSIGN                  // 2. 赋值运算符，右结合（优先级低于逻辑运算符）
+
+%left OR                       // 3. 逻辑或 ||，左结合
+
+%left AND                      // 4. 逻辑与 &&，左结合
+
+%left EQ NE                    // 5. 相等性比较 == !=，左结合
+
+%left LT LE GT GE              // 6. 关系比较 < <= > >=，左结合
+
+%left PLUS MINUS               // 7. 加减运算 + -，左结合
+
+%left STAR SLASH MOD           // 8. 乘除模运算 * / %，左结合
+
+%right INCRE DECRE             // 9. 前缀和后缀 ++ --，右结合
+                                //    注意：后缀 ++ -- 在 BASIC_EXPR 中，优先级高于前缀
+                                //    前缀 ++ -- 在 UNARY_EXPR 中，通过语法规则层次实现
 
 //THEN和ELSE用于处理if和else的移进-规约冲突
 %precedence THEN
@@ -547,6 +562,12 @@ BASIC_EXPR:
     | FUNC_CALL_EXPR {
         $$ = $1;
     }
+    | BASIC_EXPR INCRE {
+        $$ = new UnaryExpr(Operator::INCRE, $1, $1->line_num, $1->col_num);
+    }
+    | BASIC_EXPR DECRE {
+        $$ = new UnaryExpr(Operator::DECRE, $1, $1->line_num, $1->col_num);
+    }
     ;
 
 FUNC_CALL_EXPR:
@@ -624,6 +645,9 @@ TYPE:
     | FLOAT {
         $$ = TypeFactory::getBasicType(Type_t::FLOAT);
     }
+    | VOID {
+        $$ = TypeFactory::getBasicType(Type_t::VOID);
+    }
     // TODO(Lab2): 完成类型的处理
     ;
 
@@ -636,6 +660,12 @@ UNARY_OP:
     }
     | NOT {
         $$ = Operator::NOT;
+    }
+    | INCRE {
+        $$ = Operator::INCRE;
+    }
+    | DECRE {
+        $$ = Operator::DECRE;
     }
     // TODO(Lab2): 完成一元运算符的处理
     ;
