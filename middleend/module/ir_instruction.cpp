@@ -8,14 +8,14 @@ namespace ME
     std::string LoadInst::toString() const
     {
         std::stringstream ss;
-        ss << res << " = load " << dt << ", ptr " << ptr << getComment();
+        ss << res << " = load " << dt << ", " << dt << "* " << ptr << getComment();
         return ss.str();
     }
 
     std::string StoreInst::toString() const
     {
         std::stringstream ss;
-        ss << "store " << dt << " " << val << ", ptr " << ptr << getComment();
+        ss << "store " << dt << " " << val << ", " << dt << "* " << ptr << getComment();
         return ss.str();
     }
 
@@ -210,7 +210,15 @@ namespace ME
             ss << dt << std::string(dims.size(), ']');
         }
 
-        ss << ", ptr " << basePtr;
+        ss << ", ";
+        if (dims.empty())
+            ss << dt << "*";
+        else
+        {
+            for (int dim : dims) ss << "[" << dim << " x ";
+            ss << dt << std::string(dims.size(), ']') << "*";
+        }
+        ss << " " << basePtr;
         for (auto& idx : idxs) ss << ", " << idxType << " " << idx;
         ss << getComment();
         return ss.str();

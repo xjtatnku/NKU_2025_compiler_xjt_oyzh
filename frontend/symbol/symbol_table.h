@@ -10,6 +10,8 @@ namespace FE::Sym
     {
         friend iSymTable<SymTable>;
 
+        std::vector<std::map<Entry*, FE::AST::VarAttr>> scopes;
+
         void reset_impl();
 
         void              addSymbol_impl(Entry* entry, FE::AST::VarAttr& attr);
@@ -19,6 +21,9 @@ namespace FE::Sym
 
         bool isGlobalScope_impl();
         int  getScopeDepth_impl();
+    
+      public:
+        SymTable() { scopes.emplace_back(); } // Initialize with global scope
     };
 }  // namespace FE::Sym
 

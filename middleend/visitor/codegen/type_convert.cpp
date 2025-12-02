@@ -220,10 +220,13 @@ namespace ME
             {FE::AST::Operator::NOT, UnaryOperators::notFloat},
         };
 
-        apply(*this, node, m);
+        dispatch(&node, m);
         size_t srcReg = getMaxReg();
 
         DataType srcType = convert(node.attr.val.value.type);
+        
+        // PTR type should be treated as I32 for arithmetic
+        if (srcType == DataType::PTR) srcType = DataType::I32;
 
         if (srcType == DataType::I1)
         {
@@ -286,13 +289,46 @@ namespace ME
             {FE::AST::Operator::NEQ, BinaryOperators::neqFloat},
         };
 
-        apply(*this, lhs, m);
+        dispatch(&lhs, m);
         size_t lhsReg = getMaxReg();
-        apply(*this, rhs, m);
-        size_t rhsReg = getMaxReg();
-
+        
+        // Infer actual type from last instruction (more reliable than attr)
         DataType lhsType = convert(lhs.attr.val.value.type);
+        if (!block->insts.empty()) {
+            auto* lastInst = block->insts.back();
+            if (auto* loadInst = dynamic_cast<LoadInst*>(lastInst)) {
+                lhsType = loadInst->dt;
+            } else if (auto* arithInst = dynamic_cast<ArithmeticInst*>(lastInst)) {
+                lhsType = arithInst->dt;
+            } else if (auto* icmpInst = dynamic_cast<IcmpInst*>(lastInst)) {
+                lhsType = DataType::I1;
+            } else if (auto* fcmpInst = dynamic_cast<FcmpInst*>(lastInst)) {
+                lhsType = DataType::I1;
+            }
+        }
+        
+        dispatch(&rhs, m);
+        size_t rhsReg = getMaxReg();
+        
+        // Infer actual type from last instruction
         DataType rhsType = convert(rhs.attr.val.value.type);
+        if (!block->insts.empty()) {
+            auto* lastInst = block->insts.back();
+            if (auto* loadInst = dynamic_cast<LoadInst*>(lastInst)) {
+                rhsType = loadInst->dt;
+            } else if (auto* arithInst = dynamic_cast<ArithmeticInst*>(lastInst)) {
+                rhsType = arithInst->dt;
+            } else if (auto* icmpInst = dynamic_cast<IcmpInst*>(lastInst)) {
+                rhsType = DataType::I1;
+            } else if (auto* fcmpInst = dynamic_cast<FcmpInst*>(lastInst)) {
+                rhsType = DataType::I1;
+            }
+        }
+        
+        // PTR type should be treated as I32 for arithmetic
+        if (lhsType == DataType::PTR) lhsType = DataType::I32;
+        if (rhsType == DataType::PTR) rhsType = DataType::I32;
+        
         ASSERT(lhsType == DataType::I1 || lhsType == DataType::I32 || lhsType == DataType::F32);
         ASSERT(rhsType == DataType::I1 || rhsType == DataType::I32 || rhsType == DataType::F32);
         DataType pType = promoteType(lhsType, rhsType);

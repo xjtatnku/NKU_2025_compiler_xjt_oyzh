@@ -49,6 +49,7 @@ namespace ME
         const std::map<FE::Sym::Entry*, FE::AST::FuncDeclStmt*>& funcDecls;
         Function*                                                curFunc;
         Block*                                                   curBlock;
+        Block*                                                   entryBlock;
         class RegTab
         {
           public:
@@ -153,6 +154,10 @@ namespace ME
         void libFuncRegister(Module* m);
         void handleGlobalVarDecl(FE::AST::VarDeclStmt* decls, Module* m);
 
+        // Dispatch helpers
+        void dispatch(FE::AST::StmtNode* stmt, Module* m);
+        void dispatch(FE::AST::ExprNode* expr, Module* m);
+
       private:
         void   enterFunc(Function* func) { curFunc = func; }
         void   exitFunc() { curFunc = nullptr; }
@@ -165,6 +170,7 @@ namespace ME
         size_t getMaxLabel() { return curFunc->getMaxLabel(); }
         size_t getNewRegId() { return curFunc->getNewRegId(); }
         void   insert(Instruction* inst) { curBlock->insertBack(inst); }
+        void   insertToEntry(Instruction* inst) { entryBlock->insertFront(inst); }
 
       private:
         DataType convert(FE::AST::Type* at);

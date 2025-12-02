@@ -8,12 +8,13 @@
     X(UNK, unk, 0)   \
     X(I32, i32, 1)   \
     X(F32, float, 2) \
-    X(PTR, ptr, 3)   \
+    X(PTR, i32*, 3)   \
     X(VOID, void, 4) \
     X(I8, i8, 5)     \
     X(I1, i1, 6)     \
     X(I64, i64, 7)   \
-    X(DOUBLE, double, 8)
+    X(DOUBLE, double, 8) \
+    X(F32_PTR, float*, 9)
 
 #define IR_OPERAND_TYPE \
     X(UNKNOWN, 0)       \

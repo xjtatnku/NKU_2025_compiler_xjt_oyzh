@@ -20,7 +20,7 @@ namespace ME
         decls.emplace_back(new FuncDeclInst(DataType::F32, "getfloat"));
 
         // int getfarray(float a[]);
-        decls.emplace_back(new FuncDeclInst(DataType::I32, "getfarray", {DataType::PTR}));
+        decls.emplace_back(new FuncDeclInst(DataType::I32, "getfarray", {DataType::F32_PTR}));
 
         // void putint(int a);
         decls.emplace_back(new FuncDeclInst(DataType::VOID, "putint", {DataType::I32}));
@@ -35,7 +35,7 @@ namespace ME
         decls.emplace_back(new FuncDeclInst(DataType::VOID, "putfloat", {DataType::F32}));
 
         // void putfarray(int n, float a[]);
-        decls.emplace_back(new FuncDeclInst(DataType::VOID, "putfarray", {DataType::I32, DataType::PTR}));
+        decls.emplace_back(new FuncDeclInst(DataType::VOID, "putfarray", {DataType::I32, DataType::F32_PTR}));
 
         // void starttime(int lineno);
         decls.emplace_back(new FuncDeclInst(DataType::VOID, "_sysy_starttime", {DataType::I32}));
@@ -51,9 +51,42 @@ namespace ME
     void ASTCodeGen::handleGlobalVarDecl(FE::AST::VarDeclStmt* decls, Module* m)
     {
         // TODO(Lab 3-2): 生成全局变量声明 IR（支持标量与数组的初值）
-        (void)decls;
-        (void)m;
-        TODO("Lab3-2: Implement global var declaration IR generation");
+        if (!decls || !decls->decl) return;
+        auto* varDecl = decls->decl;
+        
+        for (auto* decl : *varDecl->decls) {
+            if (!decl) continue;
+            FE::AST::LeftValExpr* lval = dynamic_cast<FE::AST::LeftValExpr*>(decl->lval);
+            if (!lval) continue;
+            
+            std::string name = lval->entry->getName();
+            const auto& attr = glbSymbols.at(lval->entry);
+            DataType finalType = convert(varDecl->type);
+            
+            if (attr.arrayDims.empty()) {
+                // Scalar
+                Operand* initOp = nullptr;
+                if (decl->init) {
+                    FE::AST::Initializer* simpleInit = dynamic_cast<FE::AST::Initializer*>(decl->init);
+                    if (simpleInit && simpleInit->init_val && simpleInit->init_val->attr.val.isConstexpr) {
+                        if (finalType == DataType::I32) {
+                            initOp = getImmeI32Operand(simpleInit->init_val->attr.val.getInt());
+                        } else if (finalType == DataType::F32) {
+                            initOp = getImmeF32Operand(simpleInit->init_val->attr.val.getFloat());
+                        }
+                    }
+                }
+                if (!initOp) {
+                    // Zero init
+                    if (finalType == DataType::I32) initOp = getImmeI32Operand(0);
+                    else if (finalType == DataType::F32) initOp = getImmeF32Operand(0.0f);
+                }
+                m->globalVars.push_back(new GlbVarDeclInst(finalType, name, initOp));
+            } else {
+                // Array
+                m->globalVars.push_back(new GlbVarDeclInst(finalType, name, attr));
+            }
+        }
     }
 
     void ASTCodeGen::visit(FE::AST::Root& node, Module* m)
@@ -63,9 +96,47 @@ namespace ME
 
         // TODO(Lab 3-2): 生成模块级 IR
         // 处理顶层语句：全局变量声明、函数定义等
-        (void)node;
-        (void)m;
-        TODO("Lab3-2: Implement Root IR generation");
+        if (node.getStmts()) {
+            for (auto* stmt : *node.getStmts()) {
+                if (stmt) {
+                    if (auto* varDecl = dynamic_cast<FE::AST::VarDeclStmt*>(stmt)) {
+                        handleGlobalVarDecl(varDecl, m);
+                    } else if (auto* funcDecl = dynamic_cast<FE::AST::FuncDeclStmt*>(stmt)) {
+                        visit(*funcDecl, m);
+                    } else {
+                        ERROR("Invalid statement in root");
+                    }
+                }
+            }
+        }
+    }
+
+    void ASTCodeGen::dispatch(FE::AST::StmtNode* stmt, Module* m)
+    {
+        if (!stmt) return;
+        if (auto* s = dynamic_cast<FE::AST::ExprStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::FuncDeclStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::VarDeclStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::BlockStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::ReturnStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::WhileStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::IfStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::BreakStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::ContinueStmt*>(stmt)) visit(*s, m);
+        else if (auto* s = dynamic_cast<FE::AST::ForStmt*>(stmt)) visit(*s, m);
+        else ERROR("Unknown statement type");
+    }
+
+    void ASTCodeGen::dispatch(FE::AST::ExprNode* expr, Module* m)
+    {
+        if (!expr) return;
+        if (auto* e = dynamic_cast<FE::AST::LeftValExpr*>(expr)) visit(*e, m);
+        else if (auto* e = dynamic_cast<FE::AST::LiteralExpr*>(expr)) visit(*e, m);
+        else if (auto* e = dynamic_cast<FE::AST::UnaryExpr*>(expr)) visit(*e, m);
+        else if (auto* e = dynamic_cast<FE::AST::BinaryExpr*>(expr)) visit(*e, m);
+        else if (auto* e = dynamic_cast<FE::AST::CallExpr*>(expr)) visit(*e, m);
+        else if (auto* e = dynamic_cast<FE::AST::CommaExpr*>(expr)) visit(*e, m);
+        else ERROR("Unknown expression type");
     }
 
     LoadInst* ASTCodeGen::createLoadInst(DataType t, Operand* ptr, size_t resReg)

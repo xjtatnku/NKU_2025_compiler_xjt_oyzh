@@ -7,8 +7,30 @@ namespace FE::AST
     {
         // TODO(Lab3-1): 实现根节点的语义检查
         // 重置符号表，遍历所有顶层语句进行检查，确保存在main函数
-        (void)node;
-        TODO("Lab3-1: Implement Root node semantic checking");
+        
+        // 1. 重置状态 (构造函数中已初始化，但为防多次调用，可在此重置)
+        // symTable.reset(); // 假设不需要手动reset，或者没有reset接口
+        
+        // 2. 遍历所有顶层语句
+        if (node.getStmts()) {
+            for (auto* stmt : *node.getStmts()) {
+                if (stmt) {
+                    // 检查全局作用域下是否出现了非法语句 (只能是变量声明或函数定义)
+                    if (!dynamic_cast<VarDeclStmt*>(stmt) && !dynamic_cast<FuncDeclStmt*>(stmt)) {
+                        errors.push_back("Invalid statement in global scope at line " + std::to_string(stmt->line_num));
+                    }
+                    apply(*this, *stmt);
+                }
+            }
+        }
+
+        // 3. 检查 main 函数是否存在
+        if (!mainExists) {
+            errors.push_back("main function is not defined");
+            return false;
+        }
+
+        return errors.empty();
     }
 
     void ASTChecker::libFuncRegister()

@@ -133,6 +133,17 @@ loc.step 将列号置为1
     return YaccParser::make_STR_CONST(str, loc); 
 }
 
+0[xX]\.[0-9A-Fa-f]+[pP][+-]?[0-9]+ {
+    try {
+        float result = convertToFloatHex(yytext);
+        return YaccParser::make_FLOAT_CONST(result, loc);
+    } catch (const std::exception& e) {
+        _parser.reportError(loc, std::string("Error parsing hexadecimal float: ") + e.what());
+        auto str = std::string(yytext);
+        return YaccParser::make_ERR_TOKEN(str, loc);
+    }
+}
+
 0[xX][0-9A-Fa-f]+\.[0-9A-Fa-f]*[pP][+-]?[0-9]+ {
     try {
         float result = convertToFloatHex(yytext);
