@@ -1,5 +1,6 @@
 #include <middleend/visitor/codegen/ast_codegen.h>
 #include <debug.h>
+#include <algorithm>
 #include <functional>
 
 namespace ME
@@ -101,62 +102,50 @@ namespace ME
                     if (topList && topList->init_list && arrayAttr.arrayDims.size() == 2) {
                         int rows = arrayAttr.arrayDims[0];
                         int cols = arrayAttr.arrayDims[1];
+                        handledStructured2D = true;
 
-                        // 要求：外层 initializer 至少有 1 个元素，且每个元素都是列表
-                        bool allRowLists = true;
+                        FE::AST::VarValue zeroVal =
+                            (finalType == DataType::F32) ? FE::AST::VarValue(0.0f)
+                                                         : FE::AST::VarValue(0);
+                        long long total = static_cast<long long>(rows) * cols;
+                        arrayAttr.initList.assign(static_cast<size_t>(total), zeroVal);
+
+                        long long linearPos = 0;
+                        auto advanceLinear = [&](long long step = 1) {
+                            linearPos = std::min(linearPos + step, total);
+                        };
+
                         for (auto* rowInit : *topList->init_list) {
-                            if (!dynamic_cast<FE::AST::InitializerList*>(rowInit)) {
-                                allRowLists = false;
-                                break;
-                            }
-                        }
+                            if (linearPos >= total) break;
 
-                        if (allRowLists) {
-                            handledStructured2D = true;
-                            arrayAttr.initList.clear();
+                            if (auto* rowList = dynamic_cast<FE::AST::InitializerList*>(rowInit)) {
+                                int currentRow = static_cast<int>(linearPos / cols);
+                                if (currentRow >= rows) break;
 
-                            // 逐行处理，每一行单独零填充，模拟 C 语义
-                            for (int r = 0; r < rows; ++r) {
-                                FE::AST::VarValue zeroVal =
-                                    (finalType == DataType::F32) ? FE::AST::VarValue(0.0f)
-                                                                 : FE::AST::VarValue(0);
-
-                                const FE::AST::InitializerList* rowList = nullptr;
-                                if (r < static_cast<int>(topList->init_list->size())) {
-                                    rowList = dynamic_cast<FE::AST::InitializerList*>(
-                                        (*topList->init_list)[r]);
-                                }
-
-                                if (rowList && rowList->init_list) {
-                                    int used = 0;
+                                if (rowList->init_list) {
+                                    int col = 0;
                                     for (auto* cellInit : *rowList->init_list) {
-                                        if (used >= cols) break;
+                                        if (col >= cols) break;
                                         auto* scalar = dynamic_cast<FE::AST::Initializer*>(cellInit);
-                                        if (!scalar || !scalar->init_val ||
-                                            !scalar->init_val->attr.val.isConstexpr) {
-                                            // 非 constexpr，按 0 处理，继续向后补
-                                            arrayAttr.initList.push_back(zeroVal);
-                                        } else {
-                                            arrayAttr.initList.push_back(
-                                                scalar->init_val->attr.val.value);
+                                        if (scalar && scalar->init_val &&
+                                            scalar->init_val->attr.val.isConstexpr) {
+                                            arrayAttr.initList[static_cast<size_t>(currentRow * cols + col)] =
+                                                scalar->init_val->attr.val.value;
                                         }
-                                        ++used;
-                                    }
-                                    // 本行剩余部分补 0
-                                    while (used < cols) {
-                                        arrayAttr.initList.push_back(zeroVal);
-                                        ++used;
-                                    }
-                                } else {
-                                    // 整行缺失：整行补 0
-                                    FE::AST::VarValue zero =
-                                        (finalType == DataType::F32)
-                                            ? FE::AST::VarValue(0.0f)
-                                            : FE::AST::VarValue(0);
-                                    for (int c = 0; c < cols; ++c) {
-                                        arrayAttr.initList.push_back(zero);
+                                        ++col;
                                     }
                                 }
+
+                                linearPos = static_cast<long long>(currentRow + 1) * cols;
+                            } else if (auto* scalar = dynamic_cast<FE::AST::Initializer*>(rowInit)) {
+                                if (scalar->init_val && scalar->init_val->attr.val.isConstexpr &&
+                                    linearPos < total) {
+                                    arrayAttr.initList[static_cast<size_t>(linearPos)] =
+                                        scalar->init_val->attr.val.value;
+                                }
+                                advanceLinear();
+                            } else {
+                                advanceLinear();
                             }
                         }
                     }

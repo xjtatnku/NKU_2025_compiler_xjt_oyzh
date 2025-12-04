@@ -458,7 +458,7 @@ def main():
     
     parser = argparse.ArgumentParser(
         description="SysY Compiler Testing Script")
-    parser.add_argument("--group", default="Advanced", choices=["Basic", "Advanced"],
+    parser.add_argument("--group", default="Basic", choices=["Basic", "Advanced"],
                         help="Test case group to run.")
     parser.add_argument("--stage", default="llvm", choices=["llvm", "riscv", "arm"],
                         help="Testing stage.")

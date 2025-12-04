@@ -465,25 +465,9 @@ namespace ME
                                 bool isNestedStyle = false;
                                 if (depth + 1 < static_cast<int>(dims.size()) && !listInit->init_list->empty()) {
                                     auto* firstElem = (*listInit->init_list)[0];
-                                    FE::AST::InitializerList* firstList = dynamic_cast<FE::AST::InitializerList*>(firstElem);
-                                    if (firstList && firstList->init_list && !firstList->init_list->empty()) {
-                                        int nextDimSize = dims[depth + 1];
-                                        // If first nested list has multiple elements matching next dimension, it's nested style
-                                        // Single-element lists like {3} don't make it nested style
-                                        if (firstList->init_list->size() > 1) {
-                                            bool allSimple = true;
-                                            for (auto* elem : *(firstList->init_list)) {
-                                                if (dynamic_cast<FE::AST::InitializerList*>(elem)) {
-                                                    allSimple = false;
-                                                    break;
-                                                }
-                                            }
-                                            if (allSimple && static_cast<int>(firstList->init_list->size()) == nextDimSize) {
-                                                isNestedStyle = true;
-                                            } else if (!allSimple) {
-                                                isNestedStyle = true;
-                                            }
-                                        }
+                                    if (dynamic_cast<FE::AST::InitializerList*>(firstElem)) {
+                                        // Presence of braces indicates nested initialization for the next dimension
+                                        isNestedStyle = true;
                                     }
                                 }
                                 
@@ -530,11 +514,9 @@ namespace ME
                                     // Check if this is a true nested list matching the next dimension structure
                                     bool isNestedList = false;
                                     if (subList && subList->init_list && !subList->init_list->empty() && depth + 1 < static_cast<int>(dims.size())) {
-                                        int nextDimSize = dims[depth + 1];
-                                        
                                         if (isNestedStyle) {
                                             // In nested style, treat as nested if it matches structure
-                                            if (subList->init_list->size() > 1) {
+                                            if (subList->init_list->size() > 0) {
                                                 bool allSimple = true;
                                                 for (auto* elem : *(subList->init_list)) {
                                                     if (dynamic_cast<FE::AST::InitializerList*>(elem)) {
@@ -542,9 +524,7 @@ namespace ME
                                                         break;
                                                     }
                                                 }
-                                                if (allSimple && static_cast<int>(subList->init_list->size()) == nextDimSize) {
-                                                    isNestedList = true;
-                                                } else if (!allSimple) {
+                                                if (allSimple || !allSimple) {
                                                     isNestedList = true;
                                                 }
                                             } else if (subList->init_list->size() == 1) {
@@ -558,7 +538,7 @@ namespace ME
                                         } else {
                                             // In flattened style, check if it matches nested structure
                                             if (subList->init_list->size() > 1) {
-                                                // Multiple elements: might be nested if structure matches
+                                                // Multiple elements: braces imply nested initialization regardless of count
                                                 bool allSimple = true;
                                                 for (auto* elem : *(subList->init_list)) {
                                                     if (dynamic_cast<FE::AST::InitializerList*>(elem)) {
@@ -566,9 +546,7 @@ namespace ME
                                                         break;
                                                     }
                                                 }
-                                                if (allSimple && static_cast<int>(subList->init_list->size()) == nextDimSize) {
-                                                    isNestedList = true;
-                                                } else if (!allSimple) {
+                                                if (allSimple || !allSimple) {
                                                     isNestedList = true;
                                                 }
                                             } else if (subList->init_list->size() == 1) {
