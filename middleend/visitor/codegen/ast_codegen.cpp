@@ -98,26 +98,32 @@ namespace ME
                     //   const int PREDEF[22][8] = { {...}, {...}, ... };
                     bool handledStructured2D = false;
 
+                    // 尝试识别并优先处理“规则的二维数组初始化”：
+                    // 形如：int a[rows][cols] = { {..}, {..}, ... };
                     auto* topList = dynamic_cast<FE::AST::InitializerList*>(decl->init);
                     if (topList && topList->init_list && arrayAttr.arrayDims.size() == 2) {
                         int rows = arrayAttr.arrayDims[0];
                         int cols = arrayAttr.arrayDims[1];
                         handledStructured2D = true;
 
+                        // 先把整块数组看成 rows*cols 个元素的一维数组，全部填 0
                         FE::AST::VarValue zeroVal =
                             (finalType == DataType::F32) ? FE::AST::VarValue(0.0f)
                                                          : FE::AST::VarValue(0);
                         long long total = static_cast<long long>(rows) * cols;
                         arrayAttr.initList.assign(static_cast<size_t>(total), zeroVal);
 
+                        // 线性下标指针，相当于把 a[rows][cols] 展平成一维数组后的当前位置
                         long long linearPos = 0;
                         auto advanceLinear = [&](long long step = 1) {
                             linearPos = std::min(linearPos + step, total);
                         };
 
+                        // 遍历最外层列表中的每一项：要么是一整行的 { ... }，要么是单个标量
                         for (auto* rowInit : *topList->init_list) {
-                            if (linearPos >= total) break;
+                            if (linearPos >= total) break;  // 已经填满
 
+                            // 情况一：这一项本身是一个行列表 { ... }，按 (row, col) 两维去填
                             if (auto* rowList = dynamic_cast<FE::AST::InitializerList*>(rowInit)) {
                                 int currentRow = static_cast<int>(linearPos / cols);
                                 if (currentRow >= rows) break;
@@ -125,10 +131,11 @@ namespace ME
                                 if (rowList->init_list) {
                                     int col = 0;
                                     for (auto* cellInit : *rowList->init_list) {
-                                        if (col >= cols) break;
+                                        if (col >= cols) break;  // 该行多余的元素直接忽略
                                         auto* scalar = dynamic_cast<FE::AST::Initializer*>(cellInit);
                                         if (scalar && scalar->init_val &&
                                             scalar->init_val->attr.val.isConstexpr) {
+                                            // 写入当前行当前列：下标 = row * cols + col
                                             arrayAttr.initList[static_cast<size_t>(currentRow * cols + col)] =
                                                 scalar->init_val->attr.val.value;
                                         }
@@ -136,15 +143,20 @@ namespace ME
                                     }
                                 }
 
+                                // 当前行处理完后，把线性指针跳到下一行开头
                                 linearPos = static_cast<long long>(currentRow + 1) * cols;
-                            } else if (auto* scalar = dynamic_cast<FE::AST::Initializer*>(rowInit)) {
+                            }
+                            // 情况二：这一项只是一个标量，按“一维序列”的下一个位置去填
+                            else if (auto* scalar = dynamic_cast<FE::AST::Initializer*>(rowInit)) {
                                 if (scalar->init_val && scalar->init_val->attr.val.isConstexpr &&
                                     linearPos < total) {
                                     arrayAttr.initList[static_cast<size_t>(linearPos)] =
                                         scalar->init_val->attr.val.value;
                                 }
                                 advanceLinear();
-                            } else {
+                            }
+                            // 其它情况：当作占位，简单地前进一步
+                            else {
                                 advanceLinear();
                             }
                         }

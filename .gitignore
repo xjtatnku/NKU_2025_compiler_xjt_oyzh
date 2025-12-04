@@ -12,3 +12,4 @@ frontend/parser/lexer.h
 frontend/parser/yacc.cpp
 frontend/parser/yacc.h
 compile_commands.json
+.vscode
