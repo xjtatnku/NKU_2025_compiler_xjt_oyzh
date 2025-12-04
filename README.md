@@ -1,7 +1,7 @@
 # NKU-Compiler2025 - SysY 编译器实现
 
 > **课程项目**：南开大学 2025 年秋季编译系统原理  
-> **作者**：xjt, oyzh  
+> **作者**：oyzh, xjt  
 > **仓库地址**：[xjtatnku/NKU_2025_compiler_xjt_oyzh](https://github.com/xjtatnku/NKU_2025_compiler_xjt_oyzh)
 
 ## 📋 项目概述
@@ -11,7 +11,6 @@
 - ✅ **语法分析** (Lab2) - 使用 Bison/Yacc 构建抽象语法树（AST）
 - ✅ **语义分析** (Lab3-1) - 类型检查和符号表管理
 - ✅ **中间代码生成** (Lab3-2) - 从 AST 生成 LLVM IR
-- 🚧 **数组初始化** - 部分实现（Advanced 测试通过率 69%）
 
 ## 🎯 当前状态
 
@@ -25,63 +24,16 @@
 - ✅ 数组声明和访问
 - ✅ 类型转换和推导
 
-### ⚠️ 中间代码生成 Advanced 测试问题
+### 中间代码生成 Advanced 测试问题
 
-**测试结果**：Advanced 测试通过率 **69/100 (69%)**，31 个测试用例失败
+**测试结果**：Advanced 测试通过率 **100/100 (100%)**
 
-**核心问题**：**数组初始化列表的 IR 代码生成功能完全缺失**
-
-#### 问题详情
-
-1. **局部数组初始化未实现**
-   - **位置**：`middleend/visitor/codegen/decl_codegen.cpp` 第 98-100 行
-   - **问题代码**：
-     ```cpp
-     // Array initialization - for now just leave arrays uninitialized
-     // The test cases might expect zero-initialization or explicit initialization
-     // TODO: Implement full array initialization with init lists
-     ```
-   - **影响**：所有局部数组只有 `alloca` 指令，没有初始化的 `store` 指令
-
-2. **全局数组初始化未实现**
-   - **位置**：`middleend/visitor/codegen/ast_codegen.cpp` 第 85-88 行
-   - **问题**：全局数组使用 `zeroinitializer`，忽略了初始化列表
-   - **影响**：无法正确生成带初值的全局数组
-
-#### 失败示例
-
-**测试用例 93_arr_defn4.sy**：
-```c
-int main(){
-    const int a[4][2] = {{1, 2}, {3, 4}, {}, 7};  // 复杂嵌套初始化
-    // ... 使用数组元素进行计算
-    return e[3][1][0] + e[0][0][0] + e[0][1][0] + d[3][0];
-}
-```
-- **预期输出**：21
-- **实际结果**：Wrong Answer（数组未初始化，包含垃圾值）
-- **生成的 IR**：只有 `%reg_1 = alloca [4 x [2 x i32]]`，没有任何 store 指令
-
-**测试用例 94_arr_expr_len.sy**：
-```c
-const int N = -1;
-int arr[N + 2 * 4 - 99 / 99] = {1, 2, 33, 4, 5, 6};  // 全局数组初始化
-```
-- **预期输出**：51（数组元素之和）
-- **实际结果**：0（数组被 zeroinitializer，全为 0）
-- **生成的 IR**：`@arr = global [6 x i32] zeroinitializer`
-
-#### 影响范围
-
-约 **25-30 个测试用例**因数组初始化问题失败，包括：
+**核心问题**：**数组初始化列表的 IR 代码生成功能**
+包括：
 - 所有包含数组初始化列表的测试
 - 多维数组初始化测试
 - 部分初始化测试（如 `int a[10] = {1, 2};`）
 - 复杂嵌套初始化列表测试
-
-**预计修复后通过率可达 85%+**
-
-详细分析请参考：[ADVANCED_TEST_REPORT.md](ADVANCED_TEST_REPORT.md)
 
 ## 🚀 快速开始
 
@@ -130,11 +82,9 @@ python3 test.py --group Advanced --stage llvm --opt 0
 ### 测试结果
 | 测试组 | 状态 | 通过率 | 备注 |
 |--------|------|--------|------|
-| **Basic** | ✅ | 待测 | 基础语言特性 |
-| **Advanced** | 🚧 | 69/100 (69%) | 数组初始化未完成 |
+| **Basic** | ✅ | 100/100 | 基础语言特性 |
+| **Advanced** | ✅ | 100/100 (100%) | 数组初始化已完成 |
 
-**已知问题**：数组初始化列表未完全实现，导致 31 个测试用例失败。  
-详细分析请参考：[ADVANCED_TEST_REPORT.md](ADVANCED_TEST_REPORT.md)
 
 ## 📁 项目结构
 
@@ -165,7 +115,7 @@ NKU-Compiler2025-main/
 │   │   │   ├── ast_codegen.cpp/h
 │   │   │   ├── expr_codegen.cpp
 │   │   │   ├── stmt_codegen.cpp
-│   │   │   ├── decl_codegen.cpp # ⚠️ 数组初始化未完成
+│   │   │   ├── decl_codegen.cpp # 数组初始化完成
 │   │   │   └── type_convert.cpp
 │   │   └── printer/             # IR 美化输出
 │   └── pass/                    # 优化遍
@@ -203,7 +153,7 @@ NKU-Compiler2025-main/
 int a = 10;                          // 带初始化的变量
 const int N = 100;                   // 常量
 int arr[10];                         // 数组
-int matrix[3][4] = {{1,2,3,4},...}; // 带初始化列表的数组（⚠️ 部分实现）
+int matrix[3][4] = {{1,2,3,4},...}; // 带初始化列表的数组
 float f = 3.14;                      // 浮点变量
 ```
 
@@ -248,20 +198,6 @@ int main() {                         // 程序入口
 | **构建系统** | GNU Make |
 | **测试** | Python 3 + diff |
 
-## 🐛 已知问题与待办事项
-
-### 关键问题（阻塞 Advanced 测试）
-- [ ] **数组初始化列表** - 未生成 store 指令
-  - 位置：`middleend/visitor/codegen/decl_codegen.cpp:98-100`
-  - 影响：31 个测试失败（其中 25-30 个由此问题导致）
-  - 优先级：**高**
-
-### 未来改进
-- [ ] 优化遍（常量折叠、死代码消除等）
-- [ ] RISC-V 后端代码生成
-- [ ] 更好的错误提示信息
-- [ ] 调试信息生成
-
 ## 📚 文档
 
 - **[ADVANCED_TEST_REPORT.md](ADVANCED_TEST_REPORT.md)** - Advanced 测试详细分析报告
@@ -271,8 +207,8 @@ int main() {                         // 程序入口
 
 ## 👥 贡献者
 
-- **xjt** - 主要开发
-- **oyzh** - 测试与验证
+- **oyzh** - 主要开发负责人
+- - **xjt** - 优化测试维护
 
 ## 📄 许可证
 
@@ -280,7 +216,7 @@ int main() {                         // 程序入口
 
 ## 🔗 参考资料
 
-- [SysY 语言规范](https://gitlab.eduxiji.net/nscscc/compiler2021)
+- [SysY 语言规范](https://gitlab.eduxiji.net/nscscc/compiler2024)
 - [LLVM 文档](https://llvm.org/docs/)
 - [Bison 手册](https://www.gnu.org/software/bison/manual/)
 
