@@ -210,8 +210,8 @@ def _run_ir_and_check(test_cfg: TestConfig, test_name: str):
         return False
 
     add_returncode(test_cfg.act_output, res.returncode)
+    # 保留实际输出文件以便调试（例如对比 .act 与 .out），不再在这里删除
     check = check_file(test_cfg.act_output, test_cfg.std_output)
-    subprocess.run(["rm", test_cfg.act_output], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     if check != 0:
         print_test_status(test_name, "\033[91mWrong Answer\033[0m", final=True)
         return False
@@ -458,7 +458,7 @@ def main():
     
     parser = argparse.ArgumentParser(
         description="SysY Compiler Testing Script")
-    parser.add_argument("--group", default="Basic", choices=["Basic", "Advanced"],
+    parser.add_argument("--group", default="Advanced", choices=["Basic", "Advanced"],
                         help="Test case group to run.")
     parser.add_argument("--stage", default="llvm", choices=["llvm", "riscv", "arm"],
                         help="Testing stage.")

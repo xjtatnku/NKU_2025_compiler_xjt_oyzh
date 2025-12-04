@@ -100,7 +100,92 @@ namespace ME
                     if (initList) {
                         DataType elemType = convert(node.type);
                         if (elemType == DataType::PTR) elemType = DataType::I32;
-                        
+
+                        // --- 简单路径：一维局部数组顺序初始化，剩余补 0 ---
+                        if (dims.size() == 1) {
+                            int maxElems = dims[0];
+                            int linearPos = 0;
+
+                            // 依次把 InitDecl 展平成顺序元素
+                            std::function<void(FE::AST::InitDecl*)> process1D;
+                            process1D = [&](FE::AST::InitDecl* init) {
+                                if (!init || linearPos >= maxElems) return;
+
+                                if (auto* simple = dynamic_cast<FE::AST::Initializer*>(init)) {
+                                    if (simple->init_val && linearPos < maxElems) {
+                                        std::vector<Operand*> idxOps;
+                                        idxOps.push_back(getImmeI32Operand(0));
+                                        idxOps.push_back(getImmeI32Operand(linearPos));
+
+                                        dispatch(simple->init_val, m);
+                                        size_t valReg = getMaxReg();
+
+                                        DataType valType = convert(simple->init_val->attr.val.value.type);
+                                        if (!curBlock->insts.empty()) {
+                                            auto* lastInst = curBlock->insts.back();
+                                            if (auto* loadInst = dynamic_cast<LoadInst*>(lastInst)) {
+                                                valType = loadInst->dt;
+                                            } else if (auto* arithInst = dynamic_cast<ArithmeticInst*>(lastInst)) {
+                                                valType = arithInst->dt;
+                                            } else if (auto* icmpInst = dynamic_cast<IcmpInst*>(lastInst)) {
+                                                valType = DataType::I1;
+                                            } else if (auto* fcmpInst = dynamic_cast<FcmpInst*>(lastInst)) {
+                                                valType = DataType::I1;
+                                            }
+                                        }
+
+                                        if (valType == DataType::PTR) valType = DataType::I32;
+                                        if (valType != elemType) {
+                                            auto insts = createTypeConvertInst(valType, elemType, valReg);
+                                            for (auto* inst : insts) insert(inst);
+                                            valReg = getMaxReg();
+                                        }
+
+                                        size_t addrReg = getNewRegId();
+                                        insert(createGEP_I32Inst(elemType, getRegOperand(stackReg), dims, idxOps, addrReg));
+                                        insert(createStoreInst(elemType, valReg, getRegOperand(addrReg)));
+
+                                        linearPos++;
+                                    }
+                                } else if (auto* list = dynamic_cast<FE::AST::InitializerList*>(init)) {
+                                    if (!list->init_list) return;
+                                    for (auto* sub : *list->init_list) {
+                                        if (linearPos >= maxElems) break;
+                                        process1D(sub);
+                                    }
+                                }
+                            };
+
+                            if (initList->init_list) {
+                                for (auto* topInit : *initList->init_list) {
+                                    if (linearPos >= maxElems) break;
+                                    process1D(topInit);
+                                }
+                            }
+
+                            // 剩余元素补 0
+                            if (linearPos < maxElems) {
+                                size_t zeroReg = getNewRegId();
+                                if (elemType == DataType::F32) {
+                                    insert(createArithmeticF32Inst_ImmeAll(Operator::FADD, 0.0f, 0.0f, zeroReg));
+                                } else {
+                                    insert(createArithmeticI32Inst_ImmeAll(Operator::ADD, 0, 0, zeroReg));
+                                }
+
+                                for (int idx = linearPos; idx < maxElems; ++idx) {
+                                    std::vector<Operand*> idxOps;
+                                    idxOps.push_back(getImmeI32Operand(0));
+                                    idxOps.push_back(getImmeI32Operand(idx));
+                                    size_t addrReg = getNewRegId();
+                                    insert(createGEP_I32Inst(elemType, getRegOperand(stackReg), dims, idxOps, addrReg));
+                                    insert(createStoreInst(elemType, zeroReg, getRegOperand(addrReg)));
+                                }
+                            }
+
+                            // 一维数组已经处理完，跳过后面的复杂多维逻辑
+                            continue;
+                        }
+
                         // Helper to extract scalar value from init, handling excess nesting
                         // Rule: For excess nesting like {{{6}}}, recursively enter to find the scalar value
                         std::function<FE::AST::ExprNode*(FE::AST::InitDecl*)> extractScalarValue;

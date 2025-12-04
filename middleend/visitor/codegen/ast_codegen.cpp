@@ -54,16 +54,16 @@ namespace ME
         // TODO(Lab 3-2): 生成全局变量声明 IR（支持标量与数组的初值）
         if (!decls || !decls->decl) return;
         auto* varDecl = decls->decl;
-        
+
         for (auto* decl : *varDecl->decls) {
             if (!decl) continue;
             FE::AST::LeftValExpr* lval = dynamic_cast<FE::AST::LeftValExpr*>(decl->lval);
             if (!lval) continue;
-            
+
             std::string name = lval->entry->getName();
             const auto& attr = glbSymbols.at(lval->entry);
             DataType finalType = convert(varDecl->type);
-            
+
             if (attr.arrayDims.empty()) {
                 // Scalar
                 Operand* initOp = nullptr;
@@ -80,42 +80,133 @@ namespace ME
                 if (!initOp) {
                     // Zero init
                     if (finalType == DataType::I32) initOp = getImmeI32Operand(0);
-                    else if (finalType == DataType::F32) initOp = getImmeF32Operand(0.0f);
+                    else if (finalType == DataType::F32)
+                        initOp = getImmeF32Operand(0.0f);
                 }
                 m->globalVars.push_back(new GlbVarDeclInst(finalType, name, initOp));
             } else {
                 // Array
                 FE::AST::VarAttr arrayAttr = attr;  // Copy to modify initList
-                
+
                 // Process initialization list if present
                 if (decl->init) {
-                    FE::AST::InitializerList* initList = dynamic_cast<FE::AST::InitializerList*>(decl->init);
-                    if (initList) {
-                        // Flatten initialization list into initList using recursive helper
+                    // 优先处理“规则的二维数组初始化”：外层列表有 N 个元素，
+                    // 每个元素本身是一个 `InitializerList`，用于初始化一整行。
+                    // 典型场景：
+                    //   int a[6][50] = { {83,97,...}, {75,...}, ... };
+                    //   const int PREDEF[22][8] = { {...}, {...}, ... };
+                    bool handledStructured2D = false;
+
+                    auto* topList = dynamic_cast<FE::AST::InitializerList*>(decl->init);
+                    if (topList && topList->init_list && arrayAttr.arrayDims.size() == 2) {
+                        int rows = arrayAttr.arrayDims[0];
+                        int cols = arrayAttr.arrayDims[1];
+
+                        // 要求：外层 initializer 至少有 1 个元素，且每个元素都是列表
+                        bool allRowLists = true;
+                        for (auto* rowInit : *topList->init_list) {
+                            if (!dynamic_cast<FE::AST::InitializerList*>(rowInit)) {
+                                allRowLists = false;
+                                break;
+                            }
+                        }
+
+                        if (allRowLists) {
+                            handledStructured2D = true;
+                            arrayAttr.initList.clear();
+
+                            // 逐行处理，每一行单独零填充，模拟 C 语义
+                            for (int r = 0; r < rows; ++r) {
+                                FE::AST::VarValue zeroVal =
+                                    (finalType == DataType::F32) ? FE::AST::VarValue(0.0f)
+                                                                 : FE::AST::VarValue(0);
+
+                                const FE::AST::InitializerList* rowList = nullptr;
+                                if (r < static_cast<int>(topList->init_list->size())) {
+                                    rowList = dynamic_cast<FE::AST::InitializerList*>(
+                                        (*topList->init_list)[r]);
+                                }
+
+                                if (rowList && rowList->init_list) {
+                                    int used = 0;
+                                    for (auto* cellInit : *rowList->init_list) {
+                                        if (used >= cols) break;
+                                        auto* scalar = dynamic_cast<FE::AST::Initializer*>(cellInit);
+                                        if (!scalar || !scalar->init_val ||
+                                            !scalar->init_val->attr.val.isConstexpr) {
+                                            // 非 constexpr，按 0 处理，继续向后补
+                                            arrayAttr.initList.push_back(zeroVal);
+                                        } else {
+                                            arrayAttr.initList.push_back(
+                                                scalar->init_val->attr.val.value);
+                                        }
+                                        ++used;
+                                    }
+                                    // 本行剩余部分补 0
+                                    while (used < cols) {
+                                        arrayAttr.initList.push_back(zeroVal);
+                                        ++used;
+                                    }
+                                } else {
+                                    // 整行缺失：整行补 0
+                                    FE::AST::VarValue zero =
+                                        (finalType == DataType::F32)
+                                            ? FE::AST::VarValue(0.0f)
+                                            : FE::AST::VarValue(0);
+                                    for (int c = 0; c < cols; ++c) {
+                                        arrayAttr.initList.push_back(zero);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 否则退回到原来的“扁平化 + 末尾补 0”策略（兼容一维/更复杂情况）
+                    if (!handledStructured2D) {
+                        // Flatten initialization (single value or nested lists) into a linear list
                         struct FlattenHelper {
                             FE::AST::VarAttr& attr;
-                            FlattenHelper(FE::AST::VarAttr& a) : attr(a) {}
+                            explicit FlattenHelper(FE::AST::VarAttr& a) : attr(a) {}
                             void flatten(FE::AST::InitDecl* init) {
                                 if (!init) return;
-                                FE::AST::Initializer* simple = dynamic_cast<FE::AST::Initializer*>(init);
-                                FE::AST::InitializerList* list = dynamic_cast<FE::AST::InitializerList*>(init);
-                                if (simple && simple->init_val) {
-                                    // Only add constant values to initList
-                                    if (simple->init_val->attr.val.isConstexpr) {
+                                if (auto* simple = dynamic_cast<FE::AST::Initializer*>(init)) {
+                                    if (simple->init_val && simple->init_val->attr.val.isConstexpr) {
                                         attr.initList.push_back(simple->init_val->attr.val.value);
                                     }
-                                } else if (list && list->init_list) {
-                                    for (auto* subInit : *(list->init_list)) {
-                                        flatten(subInit);
+                                    return;
+                                }
+                                if (auto* list = dynamic_cast<FE::AST::InitializerList*>(init)) {
+                                    if (list->init_list) {
+                                        for (auto* subInit : *(list->init_list)) flatten(subInit);
                                     }
                                 }
                             }
                         };
                         FlattenHelper helper(arrayAttr);
-                        helper.flatten(initList);
+                        helper.flatten(decl->init);
+                    }
+
+                    // Pad (or trim) initializer list to cover the whole array so that
+                    // later printing logic can safely index every element.
+                    long long totalSize = 1;
+                    for (int dim : arrayAttr.arrayDims) {
+                        if (dim <= 0) {
+                            totalSize = 0;
+                            break;
+                        }
+                        totalSize *= dim;
+                    }
+                    if (totalSize > 0) {
+                        if (arrayAttr.initList.size() > static_cast<size_t>(totalSize)) {
+                            arrayAttr.initList.resize(static_cast<size_t>(totalSize));
+                        } else if (arrayAttr.initList.size() < static_cast<size_t>(totalSize)) {
+                            FE::AST::VarValue zeroVal =
+                                (finalType == DataType::F32) ? FE::AST::VarValue(0.0f) : FE::AST::VarValue(0);
+                            arrayAttr.initList.resize(static_cast<size_t>(totalSize), zeroVal);
+                        }
                     }
                 }
-                
+
                 m->globalVars.push_back(new GlbVarDeclInst(finalType, name, arrayAttr));
             }
         }

@@ -26,7 +26,9 @@ CXX_NAME := $(shell $(CXX) --version 2>/dev/null | head -1 | cut -d' ' -f1 || ec
 INCLUDES = $(addprefix -I, $(INC_DIR))
 CXX_STANDARD = -std=c++17
 DBGFLAGS = -g
-WERROR_FLAGS := -Wall -Wextra -Wpedantic -Werror -Wno-unused-but-set-variable
+# 一些编译器（如 clang）不支持 -Wno-unused-but-set-variable，会导致 unknown-warning-option 报错
+# 将其从默认警告选项中移除，以保证在不同编译器下都能正常编译
+WERROR_FLAGS := -Wall -Wextra -Wpedantic -Werror
 WARN_IGNORE := 
 CUSTOM_FLAGS := -DLOCAL_TEST
 CXXFLAGS = -O2 -MMD -MP $(CXX_STANDARD) $(INCLUDES) $(WERROR_FLAGS) $(DBGFLAGS) $(WARN_IGNORE) $(CUSTOM_FLAGS)
